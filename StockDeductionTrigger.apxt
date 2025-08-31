@@ -1,0 +1,36 @@
+trigger StockDeductionTrigger on HandsMen_Order__c (after insert, after update) {
+    Set<Id> productIds = new Set<Id>();
+ 
+    for (HandsMen_Order__c order : Trigger.new) {
+        if (order.Status_c == 'Confirmed' && order.HandsMen_Product_c != null) {
+            productIds.add(order.HandsMen_Product__c);
+        }
+    }
+ 
+    if (productIds.isEmpty()) return;
+ 
+    // Query related inventories based on product
+    Map<Id, Inventory_c> inventoryMap = new Map<Id, Inventory_c>(
+        [SELECT Id, Stock_Quantity_c, HandsMen_Product_c 
+         FROM Inventory__c 
+         WHERE HandsMen_Product__c IN :productIds]
+    );
+ 
+    List<Inventory_c> inventoriesToUpdate = new List<Inventory_c>();
+ 
+    for (HandsMen_Order__c order : Trigger.new) {
+        if (order.Status_c == 'Confirmed' && order.HandsMen_Product_c != null) {
+            for (Inventory__c inv : inventoryMap.values()) {
+                if (inv.HandsMen_Product_c == order.HandsMen_Product_c) {
+                    inv.Stock_Quantity_c -= order.Quantity_c;
+                    inventoriesToUpdate.add(inv);
+                    break;
+                }
+            }
+        }
+    }
+ 
+    if (!inventoriesToUpdate.isEmpty()) {
+        update inventoriesToUpdate;
+    }
+}
